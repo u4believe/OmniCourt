@@ -24,3 +24,10 @@ __pycache__/
 package-lock.json
 
 *.tsbuildinfo
+
+# Python virtualenv and gltest scratch output
+.venv/
+artifacts/
+
+# Local key files used by the deploy/CLI scripts — never commit these.
+*.key
