@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { AccountPanel } from "./AccountPanel";
-import { CreateBetModal } from "./CreateBetModal";
-import { useBets } from "@/lib/hooks/useFootballBets";
+import { OpenDisputeModal } from "./OpenDisputeModal";
+import { useDisputes } from "@/lib/hooks/useOmniCourt";
 import { Logo, LogoMark } from "./Logo";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
-  const { data: bets } = useBets();
+  const { data: disputes } = useDisputes();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -40,8 +40,9 @@ export function Navbar() {
   };
   const borderRadius = getBorderRadius();
 
-  const totalBets = bets?.length || 0;
-  const resolvedBets = bets?.filter(bet => bet.has_resolved).length || 0;
+  const totalDisputes = disputes?.length || 0;
+  const resolvedDisputes =
+    disputes?.filter((dispute) => dispute.status === "resolved").length || 0;
 
   return (
     <header
@@ -89,24 +90,24 @@ export function Navbar() {
                 {/* Show mark only on mobile, full logo on desktop */}
                 <LogoMark size="md" className="flex md:hidden" />
                 <Logo size="md" className="hidden md:flex" />
-                <span className="text-lg md:text-xl font-bold ml-2">Football Market</span>
+                <span className="text-lg md:text-xl font-bold ml-2">OmniCourt</span>
               </div>
 
               {/* Center: Stats */}
               <div className="hidden md:flex items-center gap-6 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Total Bets:</span>
-                  <span className="text-foreground font-bold text-accent">{totalBets}</span>
+                  <span className="text-muted-foreground">Disputes:</span>
+                  <span className="text-foreground font-bold text-accent">{totalDisputes}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Resolved:</span>
-                  <span className="text-foreground font-bold text-accent">{resolvedBets}</span>
+                  <span className="text-foreground font-bold text-accent">{resolvedDisputes}</span>
                 </div>
               </div>
 
               {/* Right: Actions */}
               <div className="flex items-center gap-3">
-                <CreateBetModal />
+                <OpenDisputeModal />
                 <AccountPanel />
               </div>
             </div>

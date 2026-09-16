@@ -20,7 +20,7 @@ vi.mock("@genlayer/transaction-kit", async (importOriginal) => ({
   createTransactionKit: mocks.createTransactionKit,
 }));
 
-import FootballBets from "../lib/contracts/FootballBets";
+import OmniCourt from "../lib/contracts/OmniCourt";
 import {
   addGenLayerNetwork,
   switchToGenLayerNetwork,
@@ -46,7 +46,7 @@ describe("network consumers", () => {
   });
 
   it("uses the shared chain for contract clients", () => {
-    const contract = new FootballBets(account, account);
+    const contract = new OmniCourt(account, account);
 
     expect(mocks.createClient).toHaveBeenLastCalledWith({
       account,

@@ -4,8 +4,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "GenLayer Football Market",
-  description: "AI-powered football match predictions on GenLayer blockchain. Create bets, make predictions, and compete for points.",
+  title: "OmniCourt — chain-agnostic dispute adjudication",
+  description: "A single GenLayer registry any application can call into to have a disputed transaction adjudicated by decentralized AI validators, on any chain or none at all.",
   manifest: "/site.webmanifest",
   icons: {
     icon: [

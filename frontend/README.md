@@ -1,6 +1,7 @@
-# GenLayer Football Market
+# OmniCourt frontend
 
-Next.js frontend for GenLayer Football Market - AI-powered football match predictions on GenLayer blockchain.
+Next.js frontend for OmniCourt — a chain-agnostic dispute adjudication registry
+on GenLayer. See the [project README](../README.md) for the contract itself.
 
 ## Setup
 
@@ -22,7 +23,7 @@ cp .env.example .env
 ```
 
 3. Configure environment variables:
-   - `NEXT_PUBLIC_CONTRACT_ADDRESS` - GenLayer Football Betting contract address
+   - `NEXT_PUBLIC_CONTRACT_ADDRESS` - the deployed OmniCourt registry address
    - `NEXT_PUBLIC_GENLAYER_RPC_URL` - GenLayer RPC URL (defaults to `https://studio-next.genlayer.com/api`)
    - `NEXT_PUBLIC_GENLAYER_CHAIN_ID` - RPC chain ID (defaults to `61997`)
    - `NEXT_PUBLIC_GENLAYER_CHAIN_NAME` - Network label shown to users
@@ -76,10 +77,17 @@ disconnect preference. Private keys are never stored by the application.
 
 ## Features
 
-- **Create Bets**: Create football match predictions with team names, game date, and predicted winner (Team 1, Team 2, or Draw)
-- **View Bets**: Real-time bet table with match details, predictions, status, and owners
-- **Resolve Bets**: Bet owners can resolve matches using GenLayer's AI to verify actual results
-- **Leaderboard**: Track top players by points earned from correct predictions
-- **Player Stats**: View your points and ranking in the community
+- **File a dispute**: Pick one of the three relationship types (agent-agent,
+  agent-person, person-person) and describe the claim and the remedy sought.
+  Parties are named by free-form reference, so neither side needs a GenLayer
+  wallet.
+- **Submit evidence**: Attach any public URL to either side. Validators fetch it
+  themselves, which is what makes the registry network-agnostic.
+- **Adjudicate**: Send a dispute for judgment. Each validator independently
+  re-fetches every evidence URL and reaches its own verdict.
+- **Read verdicts**: Per dispute — status, both evidence trails, the recommended
+  action, the allocation split, and the validators' reasoning.
+- **Integration panel**: The exact `get_verdict` call another application makes,
+  rendered against the live contract address.
 - **Glass-morphism UI**: Premium dark theme with OKLCH colors, backdrop blur effects, and smooth animations
 - **Data Refresh**: TanStack Query refreshes contract data after completed transactions and when the window regains focus

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSuccessfulDeploymentReceipt } from "../../deploy/deployScript";
+import { isSuccessfulDeploymentReceipt } from "../../deploy/receipt.mjs";
 
 describe("deployment receipt success", () => {
   it("does not treat UNDETERMINED as a successful deployment", () => {
