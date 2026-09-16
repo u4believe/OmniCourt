@@ -1,169 +1,277 @@
-# Sample GenLayer project
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/license/mit/)
-[![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/8Jm4v89VAu)
-[![Telegram](https://img.shields.io/badge/Telegram--T.svg?style=social&logo=telegram)](https://t.me/genlayer)
-[![Twitter](https://img.shields.io/twitter/url/https/twitter.com/yeagerai.svg?style=social&label=Follow%20%40GenLayer)](https://x.com/GenLayer)
-[![GitHub star chart](https://img.shields.io/github/stars/yeagerai/genlayer-project-boilerplate?style=social)](https://star-history.com/#yeagerai/genlayer-js)
+# OmniCourt
 
-## About
-This project includes the boilerplate code for a GenLayer use case implementation, specifically a football bets game.
+**A chain-agnostic dispute adjudication registry on GenLayer.**
 
-## Branching
+One permanently deployed Intelligent Contract that any application — on any
+blockchain, or none at all — can call into to have a disputed transaction
+adjudicated by decentralized AI validators, whether the dispute is between two
+AI agents, an agent and a human, or two humans.
 
-See [docs/BRANCHING.md](docs/BRANCHING.md) for the release-train model used by
-this repo.
+- **Network:** GenLayer Studio Next (chain `61997`)
+- **Contract:** `0xa4B43D14C18bc6397B771DDb89D63e1c1d02c786`
+- **Contract source:** [`contracts/omnicourt.py`](contracts/omnicourt.py)
 
-## What's included
-- An example intelligent contract (Football Bets) with web access and LLM integration
-- **Direct mode tests** — fast, in-memory unit tests with web/LLM mocking (~ms per test)
-- **Integration tests** — full end-to-end tests against GenLayer Studio
-- **Contract linting** — static analysis to catch common contract issues before deployment
-- **CI pipeline** — GitHub Actions workflow for linting and direct tests
-- A production-ready Next.js 15 frontend with TypeScript, TanStack Query, and Radix UI
-- Configuration file template and deployment scripts
+---
 
-## Requirements
-- Python >= 3.12
-- [GenLayer CLI](https://github.com/genlayerlabs/genlayer-cli) globally installed: `npm install -g genlayer`
-- GenLayer Studio (for integration tests and deployment): Install from [Docs](https://docs.genlayer.com/developers/intelligent-contracts/tooling-setup#using-the-genlayer-studio) or use the hosted [GenLayer Studio](https://studio.genlayer.com/)
+## Why this is genuinely network-agnostic
 
-## Project Structure
+GenLayer validators never read state from the chain the dispute happened on.
+They fetch **public evidence** — a block explorer page, an API response, a
+delivery-tracking page, a hosted screenshot — directly from the web via
+`gl.nondet.web.render()`, independently, per validator.
 
+That is the actual mechanism: evidence is verified by *re-fetching a public
+URL*, not by bridging or reading foreign chain state. The disputed transaction
+can be a Solana swap, a PayPal receipt, an Ethereum escrow, or a plain email.
+If there is a public evidence trail, OmniCourt can adjudicate it.
+
+## Why decentralized judgment matters here
+
+Every question OmniCourt answers — did the agent's output match its mandate?
+did the buyer actually receive the item? did the second agent deliver the result
+it billed for? — is a *subjective, evidence-weighing* judgment, not a
+deterministic computation.
+
+A single centralized arbiter (a platform's support team, one LLM call from one
+server) is both a single point of failure and a single point of bias. Optimistic
+Democracy across independent validators is what makes the verdict *contestable
+and non-unilateral* — which is the only reason a "court" is credible at all.
+
+`resolve_dispute` uses `gl.eq_principle.prompt_comparative`, so every validator
+re-fetches the evidence and reaches its own verdict; consensus is over the
+*substance* of the judgment, not over a leader's claim.
+
+## The three dispute types
+
+One registry, three genuinely different relationship types, each with its own
+adjudication rubric:
+
+| Type | Who | What the rubric weighs |
+|------|-----|------------------------|
+| `agent_agent` | Two AI agents under a mandate | Did the respondent's output/action match what was promised? |
+| `agent_person` | An AI agent and a human | Did the agent perform the task to a reasonable standard? |
+| `person_person` | Two humans in a commercial exchange | Delivery confirmations, tracking, timestamps — a standard chargeback |
+
+## The verdict schema
+
+One schema covers all three, merging the financial vocabulary (who gets the
+money) with the behavioural one (what happens to the agent's authority):
+
+```json
+{
+  "recommended_action": "favor_complainant | favor_respondent | split | warn | constrain | revoke | escalate",
+  "allocation_bps": 0,
+  "reasoning": "..."
+}
 ```
-contracts/              # Python intelligent contracts
-tests/
-  direct/               # Fast in-memory tests (no Studio required)
-    test_create_bet.py   # Bet creation logic
-    test_resolve_bet.py  # Bet resolution with web/LLM mocks
-    test_views.py        # Read-only view methods
-  integration/           # Full tests against GenLayer Studio
-    test_football_bets.py
-    fixtures.py          # Expected state fixtures
-frontend/               # Next.js 15 app (TypeScript, TanStack Query, Radix UI)
-deploy/                 # TypeScript deployment scripts
-gltest.config.yaml      # Test runner network configuration
-pyproject.toml          # Python/pytest configuration
-.github/workflows/      # CI pipeline
-```
 
-## Quick Start
+`allocation_bps` (0-10000) expresses *how much* to favour the complainant when
+the dispute has a financial dimension (10000 = fully, 5000 = even split). It is
+0 and ignored for purely behavioural actions.
 
-### 1. Set up Python environment
+Malformed model output cannot corrupt the registry: an action outside the
+allowed set is coerced to `escalate`, and an allocation that is out of range,
+negative, or unparseable is clamped into 0-10000.
+
+---
+
+## Verify a full cycle yourself
+
+A reviewer can reproduce one complete dispute against the live deployment
+without a wallet for the read steps.
+
+### Reads (no wallet needed)
 
 ```shell
-python3 -m venv .venv
-source .venv/bin/activate
+npm ci
+node scripts/omnicourt.mjs count       # how many disputes the registry holds
+node scripts/omnicourt.mjs list        # every dispute with its verdict
+node scripts/omnicourt.mjs dispute 0   # full record incl. the evidence trail
+node scripts/omnicourt.mjs verdict 0   # what an integrating app reads back
+```
+
+Dispute `0` is a real `agent_agent` case already adjudicated on Studio Next.
+The complainant cited a public task record showing `completed: false`; the
+respondent cited a record for a *different* task. The validators caught the
+substitution:
+
+> *"The complainant's evidence directly references task 1 and shows
+> `"completed": false`, which contradicts the respondent's claim that task 1 was
+> done. The respondent's evidence refers to a different task (id 4), so it does
+> not rebut the allegation about task 1."*
+> — `favor_complainant`, `allocation_bps: 10000`
+
+Dispute `1` (`person_person`) resolved to `escalate`, because neither side's
+evidence actually spoke to delivery — the insufficient-evidence path working as
+designed.
+
+### Writes (needs a funded key)
+
+`DEPLOY_KEY_FILE` points at a file holding a hex private key. `genlayer account
+unlock` needs an OS keychain, which WSL and bare containers do not have, so
+decrypt the keystore to a `0600` file instead:
+
+```shell
+python3 scripts/extract_key.py ~/.genlayer/keystores/<name>.json <password> /tmp/omnicourt.key
+export DEPLOY_KEY_FILE=/tmp/omnicourt.key
+
+node scripts/omnicourt.mjs open person_person \
+  "buyer:alice@example.com" "seller:bob@example.com" \
+  "Paid for a laptop on 2026-09-01. It never arrived." "Full refund"
+
+node scripts/omnicourt.mjs evidence <id> complainant "https://<public-evidence-url>"
+node scripts/omnicourt.mjs evidence <id> respondent  "https://<public-evidence-url>"
+node scripts/omnicourt.mjs resolve <id>
+node scripts/omnicourt.mjs verdict <id>
+```
+
+### Frontend
+
+```shell
+cp frontend/.env.example frontend/.env   # then set the contract address
+cd frontend && npm run dev               # http://localhost:3000
+```
+
+The UI shows, per dispute: status, both evidence lists, the verdict action, the
+allocation split, and the validators' reasoning. Writes go through Transaction
+Kit, so you see a fee quote before signing.
+
+---
+
+## How another app integrates
+
+OmniCourt is a **judgment layer, not an enforcement layer**. It returns a
+verdict; your application enforces it in its own domain.
+
+```ts
+import { createClient } from "genlayer-js";
+import { studioDevnet } from "genlayer-js/chains";
+
+const chain = {
+  ...studioDevnet,
+  id: 61997,
+  rpcUrls: { default: { http: ["https://studio-next.genlayer.com/api"] } },
+};
+
+const verdict = await createClient({ chain }).readContract({
+  address: "0xa4B43D14C18bc6397B771DDb89D63e1c1d02c786",
+  functionName: "get_verdict",
+  args: [disputeId],
+});
+// => { status, recommended_action, allocation_bps, reasoning }
+```
+
+Then act on it however your domain requires: release escrow, refund, revoke an
+agent's permission, flag reputation.
+
+### Contract API
+
+| Method | Kind | Purpose |
+|--------|------|---------|
+| `open_dispute(type, complainant_ref, respondent_ref, claim, remedy)` | write | Files a dispute, returns its id |
+| `submit_evidence(dispute_id, role, evidence_url)` | write | Attaches a public URL to one side |
+| `resolve_dispute(dispute_id)` | write | Runs adjudication across validators |
+| `get_verdict(dispute_id)` | view | What an integrating app reads back |
+| `get_dispute(dispute_id)` | view | Full record incl. the evidence trail |
+| `list_disputes()` | view | Every dispute in the registry |
+| `dispute_count()` | view | Number of disputes filed |
+
+---
+
+## Development
+
+```shell
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+
+genvm-lint check contracts/omnicourt.py     # static analysis
+python3 -m pytest tests/direct/ -v          # 69 fast in-memory tests
+gltest tests/integration/ -v -s             # full consensus tests (needs Studio)
 ```
 
-### 2. Lint your contracts
+> **Note:** run pytest as `python3 -m pytest`, not bare `pytest`. This repo has an
+> `__init__.py` at its root, which makes pytest's rootdir walk skip the project
+> directory, so `from tests.direct.conftest import ...` fails under bare `pytest`.
 
-Run the GenVM linter to catch issues before deployment:
+> If `python3 -m venv` fails with a missing `ensurepip`, install
+> `python3.12-venv`, or use [uv](https://github.com/astral-sh/uv):
+> `uv venv .venv && uv pip install --python .venv/bin/python -r requirements.txt`.
+
+### Test coverage
+
+| Suite | What it covers |
+|-------|----------------|
+| `tests/direct/test_omnicourt_intake.py` | Dispute creation, validation, evidence rules, the per-side cap |
+| `tests/direct/test_omnicourt_resolve.py` | One test per verdict action, plus coercion and clamping of malformed model output |
+| `tests/direct/test_omnicourt_evidence_fetch.py` | Dead links, oversized pages, and the rubric reaching the prompt |
+| `tests/direct/test_omnicourt_consensus.py` | The validator side: agreement, disagreement, and a failed leader |
+| `tests/integration/test_omnicourt.py` | All three dispute types end-to-end against real consensus |
+
+### Deploying your own instance
+
+The published GenLayer CLI (0.39.2) has **no Studio Next preset** — it only
+knows Studio (chain 61999), so `genlayer deploy` signs for the wrong chain and
+the RPC rejects it with `InvalidChainId`. Use the included script instead:
 
 ```shell
-genvm-lint check contracts/football_bets.py
+DEPLOY_KEY_FILE=/path/to/key node deploy/deployStudioNext.mjs
 ```
 
-The linter catches:
-- Forbidden imports and non-deterministic calls
-- Invalid storage types (must use `TreeMap`, `DynArray`, `u256`, etc.)
-- Missing decorators and return type annotations
-- Non-deterministic operations outside equivalence principle blocks
-- And [20+ other rules](https://github.com/genlayerlabs/genvm-linter)
+It builds the Studio Next chain from `genlayer-js` directly, quotes the active
+fee policy (Consensus v0.6 requires a non-zero fee value or the deploy reverts
+with `FeeValueMustBeNonZero`), checks the deployer's balance first, and refuses
+to report success on an `UNDETERMINED` receipt.
 
-### 3. Run direct mode tests
+---
 
-Direct mode tests run contracts in-memory without needing GenLayer Studio. They use mocks for web requests and LLM calls, giving you fast feedback (~milliseconds per test):
+## Deliberately out of scope
 
-```shell
-pytest tests/direct/ -v
+Named explicitly, because each is a judgment call rather than a gap.
+
+- **Enforcement.** OmniCourt returns a verdict; it does not move funds or revoke
+  permissions on any chain. Enforcement is chain-specific and belongs to the
+  calling application.
+- **Identity-bound evidence submission.** `submit_evidence` does **not** check
+  `gl.message.sender_address` against a stored party address, because a party may
+  have no GenLayer wallet at all (a Solana agent, someone who paid by bank
+  transfer). Evidence is tagged by role only. This is a real limitation, pinned
+  by a test so that changing it is a deliberate act. *V2 path:* signed off-chain
+  proofs or ERC-8004 agent identity.
+- **Payable filing bonds.** Studio Next does not roll back a value transfer if
+  execution reverts afterward, so a payable method that raises after
+  `gl.message.value` has arrived strands the caller's funds permanently. Every
+  method here is non-payable. Protocol transaction fees are handled by
+  Transaction Kit's fee quoting, so no contract-level economics are needed for a
+  working system.
+- **Appeals.** A bonded appeal flow is a natural next step, not part of a
+  coherent minimum.
+
+## Architecture
+
 ```
-
-Direct mode features used in these tests:
-- `direct_deploy("contracts/file.py")` — deploy contract in memory
-- `direct_vm.sender = address` — set transaction sender
-- `direct_vm.mock_web(pattern, response)` — mock HTTP/render calls
-- `direct_vm.mock_llm(pattern, response)` — mock LLM responses
-- `direct_vm.expect_revert("message")` — assert expected failures
-- `direct_vm.clear_mocks()` — reset mocks between calls
-
-### 4. Deploy the contract
-
-1. Choose your network: `genlayer network`
-2. Deploy: `genlayer deploy` (runs the script in `/deploy/deployScript.ts`)
-
-### 5. Run integration tests
-
-Integration tests deploy the contract to GenLayer Studio and test with real consensus:
-
-```shell
-gltest tests/integration/ -v -s
+Any app, on any chain (escrow, agent framework, marketplace, wallet)
+      |
+      | 1. open_dispute(type, complainant_ref, respondent_ref, claim, remedy)
+      v
+OmniCourt - one deployed GenLayer contract, a persistent dispute registry
+      |
+      | 2. submit_evidence(dispute_id, role, url)   <- either party, or a relayer
+      |    evidence = ANY public URL
+      v
+resolve_dispute(dispute_id)
+      |
+      | 3. each validator independently:
+      |      - gl.nondet.web.render() every evidence URL
+      |      - gl.nondet.exec_prompt() a type-specific rubric prompt
+      |      - consensus via gl.eq_principle.prompt_comparative
+      v
+Verdict on-chain: { recommended_action, allocation_bps, reasoning }
+      |
+      | 4. get_verdict(dispute_id)  <- any app reads this back
+      v
+The calling app enforces the outcome in its own domain
 ```
-
-These require GenLayer Studio running (local or hosted).
-
-### 6. Set up the frontend
-
-1. Copy `frontend/.env.example` to `frontend/.env`
-2. Add your deployed contract address as `NEXT_PUBLIC_CONTRACT_ADDRESS`
-3. Run:
-
-```shell
-cd frontend
-npm install
-npm run dev
-```
-
-The app will be available at http://localhost:3000/.
-
-### Fee profile (developer suggestions)
-
-The frontend uses published `@genlayer/transaction-kit` and
-`@genlayer/transaction-kit-react` version `0.1.0-rc.2`, with `genlayer-js`
-`2.0.0-rc.1`. Run `npm ci` from the repository root to install the locked releases.
-
-The default network is Studio Next (Consensus v0.6) at
-`https://studio-next.genlayer.com/api` (chain ID `61997`). Copy
-`frontend/.env.example`; change the RPC URL and chain ID together when targeting
-another deployment. Wallet, SDK, and Transaction Kit share this configuration.
-
-Transaction Kit uses active network fee defaults. The checked-in
-`frontend/fee-profile.json` is not wired into the application because measured
-fees are specific to a contract build, GenVM version, and network. To use a
-developer profile, regenerate it for your deployment and explicitly pass it as
-`suggestions` to `createTransactionKit` in `frontend/lib/genlayer/kit.ts`.
-
-Regenerate it with `npm run test:fees` while GenLayer Studio is running. The fee profile command estimates a trusted Studio fee preset from the active fee policy, runs the measured Football Bets deploy/create-bet scenario, and writes max-observed x 1.25 headroom as decimal strings.
-
-Missing keys, such as time-unit allocations, fall back to network defaults.
-
-## How the Football Bets Contract Works
-
-1. **Creating Bets**: Users bet on a football match by providing the game date, teams, and predicted winner.
-2. **Resolving Bets**: After the match, the contract fetches results from BBC Sport, uses an LLM to extract the score, and validates via the equivalence principle.
-3. **Points**: Correct predictions earn points. Users can query their points or the leaderboard.
-
-## Testing Strategy
-
-| Test Type | Command | Speed | Requires Studio |
-|-----------|---------|-------|-----------------|
-| **Lint** | `genvm-lint check contracts/*.py` | ~250ms | No |
-| **Direct** | `pytest tests/direct/ -v` | ~ms/test | No |
-| **Integration** | `gltest tests/integration/ -v -s` | ~min/test | Yes |
-
-**Recommended workflow:**
-1. Lint after every contract change
-2. Run direct tests frequently during development
-3. Run integration tests before deployment to verify consensus behavior
-
-For AI coding agents (Claude Code, Cursor, etc.), the linter and direct tests provide the fast feedback loop needed for iterative development without requiring a running Studio instance.
-
-## Community
-- **[Discord](https://discord.gg/8Jm4v89VAu)**: Discussions, support, and announcements
-- **[Telegram](https://t.me/genlayer)**: Informal chats and quick updates
-
-## Documentation
-For detailed information, see our [documentation](https://docs.genlayer.com/).
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+MIT - see [LICENSE](LICENSE).

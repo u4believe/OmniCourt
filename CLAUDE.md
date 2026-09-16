@@ -6,29 +6,65 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Linting
-genvm-lint check contracts/football_bets.py    # Lint a contract
+genvm-lint check contracts/omnicourt.py        # Lint the contract
 
-# Testing
-pytest tests/direct/ -v                        # Direct mode tests (fast, no Studio)
+# Testing — use `python3 -m pytest`, not bare `pytest` (see note below)
+python3 -m pytest tests/direct/ -v             # Direct mode tests (fast, no Studio)
 gltest tests/integration/ -v -s                # Integration tests (requires Studio)
 
-# Deployment
-genlayer network                               # Select network
-genlayer deploy                                # Deploy contracts
+# Deployment — the CLI has no Studio Next preset, so use the script
+DEPLOY_KEY_FILE=/path/to/key node deploy/deployStudioNext.mjs
+
+# Driving the deployed registry
+node scripts/omnicourt.mjs list                # Reads need no wallet
+node scripts/omnicourt.mjs verdict 0
 
 # Frontend
 cd frontend && npm run dev                     # Start frontend dev server
 ```
 
+## Project-specific gotchas
+
+These cost real time to rediscover:
+
+- **Run pytest as `python3 -m pytest`.** The repo root has an `__init__.py`,
+  which makes pytest's rootdir walk skip the project directory, so
+  `from tests.direct.conftest import ...` fails under bare `pytest`.
+- **The contract's `Depends` runner hash must exist in the installed GenVM
+  release.** `contracts/omnicourt.py` pins
+  `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng`. A hash
+  that is not in the release tree fails every direct test with
+  `FileNotFoundError: runner ... not under ~/.cache/gltest-direct/...`.
+- **Two SDK generations ship side by side.** The pinned runner maps to the
+  `import genlayer as gl` / `gl.contract.Contract` / `gl.storage.TreeMap` API.
+  The other runner in `legacy-runners/` maps to the newer
+  `from genlayer import *` / `gl.Contract` API. Mixing them produces confusing
+  `name 'gl' is not defined` or `No module named 'genlayer.storage'` errors.
+- **`DynArray()` cannot be constructed by user code** — it raises `TypeError`.
+  Create the containing record with `TreeMap.get_or_insert_default(key)` and
+  assign fields, then `append()` into the already-allocated `DynArray`.
+- **The GenLayer CLI (0.39.2) has no Studio Next preset.** It only knows Studio
+  (chain 61999), so `genlayer deploy --rpc <studio-next>` signs for the wrong
+  chain and fails with `InvalidChainId`. Use `deploy/deployStudioNext.mjs`.
+- **Consensus v0.6 deploys and writes need a non-zero fee value**, or they
+  revert with `FeeValueMustBeNonZero`. Quote it with
+  `client.estimateTransactionFees(...)` rather than hardcoding.
+- **Studio Next's faucet needs a hex-encoded amount.**
+  `sim_fundAccount` with a decimal integer returns a tx hash but credits
+  nothing; `["0x<addr>", "0x56BC75E2D63100000"]` works.
+- **Studio Next drops sockets intermittently.** Retry RPC calls rather than
+  treating the first `UND_ERR_SOCKET` / SSL error as a real failure.
+
 ## Architecture
 
 ```
-contracts/          # Python intelligent contracts
+contracts/omnicourt.py   # The OmniCourt dispute registry
 tests/
-  direct/           # Fast in-memory tests with web/LLM mocks
-  integration/      # Full tests against GenLayer Studio
-frontend/           # Next.js 15 app (TypeScript, TanStack Query, Radix UI)
-deploy/             # TypeScript deployment scripts
+  direct/                # Fast in-memory tests with web/LLM mocks
+  integration/           # Full tests against GenLayer Studio
+frontend/                # Next.js app (TypeScript, TanStack Query, Radix UI)
+deploy/                  # Studio Next deployment script
+scripts/omnicourt.mjs    # CLI for driving the deployed registry
 ```
 
 **Frontend stack**: Next.js 15, React 19, TypeScript, Tailwind CSS, TanStack Query, Wagmi/Viem, MetaMask wallet integration.
@@ -36,31 +72,35 @@ deploy/             # TypeScript deployment scripts
 ## Development Workflow
 
 1. Write/modify contract in `contracts/`
-2. Lint: `genvm-lint check contracts/your_contract.py`
-3. Test direct: `pytest tests/direct/ -v`
-4. Start Studio and deploy: `genlayer deploy`
+2. Lint: `genvm-lint check contracts/omnicourt.py`
+3. Test direct: `python3 -m pytest tests/direct/ -v`
+4. Deploy: `DEPLOY_KEY_FILE=/path/to/key node deploy/deployStudioNext.mjs`
 5. Test integration: `gltest tests/integration/ -v -s`
 6. Run frontend: `cd frontend && npm run dev`
 
 ## Contract Development
 
-Contracts are Python files in `/contracts/` using the GenLayer SDK:
+Contracts are Python files in `/contracts/` using the GenLayer SDK. Match the
+API generation of the pinned runner (see gotchas above) — this project uses the
+`import genlayer as gl` style:
 
 ```python
-from genlayer import *
+# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
+import genlayer as gl
 
-class MyContract(gl.Contract):
-    data: TreeMap[Address, str]
+
+class MyContract(gl.contract.Contract):
+    data: gl.storage.TreeMap[gl.Address, str]
 
     def __init__(self):
-        self.data = TreeMap()
+        pass
 
     @gl.public.view
-    def get_data(self, addr: Address) -> str:
+    def get_data(self, addr: gl.Address) -> str:
         return self.data.get(addr, "")
 
     @gl.public.write
-    def set_data(self, value: str):
+    def set_data(self, value: str) -> None:
         self.data[gl.message.sender_address] = value
 ```
 
@@ -69,7 +109,9 @@ class MyContract(gl.Contract):
 - `@gl.public.write` — State-modifying methods
 - `@gl.public.write.payable` — Methods accepting value
 
-**Storage types**: `TreeMap`, `DynArray`, `Array`, `u256`, `i256`, `@allow_storage` for custom classes
+**Storage types**: `gl.storage.TreeMap`, `gl.storage.DynArray`, `gl.storage.Array`,
+`gl.u256`, `gl.i256`, and `@allow_storage` (from `genlayer.storage import allow`)
+for dataclasses stored inside collections.
 
 ## Writing Direct Mode Tests
 
@@ -113,8 +155,8 @@ The GenVM linter catches contract issues before deployment:
 
 ## Frontend Patterns
 
-- Contract interactions: `frontend/lib/contracts/FootballBets.ts`
-- React hooks: `frontend/lib/hooks/useFootballBets.ts`
+- Contract interactions: `frontend/lib/contracts/OmniCourt.ts`
+- React hooks: `frontend/lib/hooks/useOmniCourt.ts`
 - Wallet context: `frontend/lib/genlayer/WalletProvider.tsx`
 - GenLayer client: `frontend/lib/genlayer/client.ts`
 
