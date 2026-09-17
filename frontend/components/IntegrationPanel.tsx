@@ -64,10 +64,19 @@ const verdict = await client.readContract({
       code: `// Evidence is any public URL — validators re-fetch it themselves.
 // That is what makes OmniCourt network-agnostic: no bridging, no
 // reading foreign chain state.
+//
+// Prefer an endpoint an automated request can actually read. Most
+// explorer HTML sits behind bot protection and comes back as a
+// challenge page, which the contract flags as unreadable rather than
+// letting it pass as evidence.
 await client.writeContract({
   address: "${contractAddress}",
   functionName: "submit_evidence",
-  args: [disputeId, "complainant", "https://solscan.io/tx/…"],
+  args: [
+    disputeId,
+    "complainant",
+    "https://eth.blockscout.com/api/v2/transactions/0x…",
+  ],
   fees,
 });`,
     },

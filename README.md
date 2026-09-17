@@ -16,8 +16,8 @@ AI agents, an agent and a human, or two humans.
 ## Why this is genuinely network-agnostic
 
 GenLayer validators never read state from the chain the dispute happened on.
-They fetch **public evidence** — a block explorer page, an API response, a
-delivery-tracking page, a hosted screenshot — directly from the web via
+They fetch **public evidence** — a chain API response, a raw data endpoint, a
+delivery-tracking page, a hosted image — directly from the web via
 `gl.nondet.web.render()`, independently, per validator.
 
 That is the actual mechanism: evidence is verified by *re-fetching a public
@@ -72,6 +72,30 @@ the dispute has a financial dimension (10000 = fully, 5000 = even split). It is
 Malformed model output cannot corrupt the registry: an action outside the
 allowed set is coerced to `escalate`, and an allocation that is out of range,
 negative, or unparseable is clamped into 0-10000.
+
+## Choosing evidence a validator can actually read
+
+Evidence is fetched by an automated request, so the source has to serve its
+content to one. Measured against the live deployment:
+
+| Source | Result |
+|--------|--------|
+| Blockscout and similar JSON APIs | works |
+| Plain REST/JSON endpoints, raw files, direct image links | works |
+| Etherscan HTML | **HTTP 200 carrying a bot-protection page** |
+| Arc-scan HTML | **HTTP 403, bot-protection page** |
+
+Most block explorer *pages* sit behind bot protection. Etherscan is the awkward
+case: the request succeeds with a 200, so nothing errors, and a challenge page
+would otherwise reach the adjudicator dressed as evidence.
+
+OmniCourt detects this. Every fetched item carries a `readable` flag, and an
+item that could not be retrieved — unreachable, empty, or a challenge page — is
+marked `"readable": false` and described to the model as proving nothing for
+either side. A party whose case rests on an unreadable source does not quietly
+win on it; the expected outcome is `escalate`.
+
+The practical rule: **prefer an API endpoint over a web page.**
 
 ---
 

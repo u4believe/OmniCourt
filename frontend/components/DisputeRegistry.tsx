@@ -8,6 +8,7 @@ import {
   Gavel,
   Loader2,
   Scale,
+  ShieldAlert,
 } from "lucide-react";
 import {
   GenLayerTransactionPanel,
@@ -237,8 +238,8 @@ export function DisputeRegistry() {
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">Submit evidence</DialogTitle>
             <DialogDescription>
-              Any public URL: a block explorer transaction, an API response, a
-              tracking page, a hosted screenshot. Validators fetch it themselves.
+              Paste a public URL — not a file. Validators fetch it themselves,
+              so it has to be reachable by an automated request.
             </DialogDescription>
           </DialogHeader>
 
@@ -252,8 +253,21 @@ export function DisputeRegistry() {
                   id="evidence-url"
                   value={evidenceUrl}
                   onChange={(e) => setEvidenceUrl(e.target.value)}
-                  placeholder="https://etherscan.io/tx/0x…"
+                  placeholder="https://eth.blockscout.com/api/v2/transactions/0x…"
                 />
+              </div>
+
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  Pick a source a machine can actually read
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Most explorer pages (Etherscan, Arc-scan) sit behind bot
+                  protection and come back as a challenge page, which counts as
+                  no evidence at all. Their JSON API endpoints usually work, as
+                  do raw data endpoints and direct image links.
+                </p>
               </div>
               <Button
                 className="w-full"

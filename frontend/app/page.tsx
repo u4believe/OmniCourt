@@ -33,7 +33,7 @@ export default function HomePage() {
               <Step
                 index="2"
                 title="Submit evidence"
-                body="Any public URL: a block explorer transaction, an API response, a tracking page. Nothing is bridged and no foreign chain state is read."
+                body="Any public URL a machine can read — a chain API response, a raw data endpoint, a direct image link. Nothing is bridged and no foreign chain state is read."
               />
               <Step
                 index="3"

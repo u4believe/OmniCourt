@@ -51,6 +51,22 @@ MAX_EVIDENCE_PER_SIDE = 8
 EVIDENCE_CHAR_LIMIT = 4000
 ALLOCATION_MAX = 10000
 
+# Many block explorers sit behind bot protection. The interstitial they serve
+# often arrives as a normal 200 response, so fetching "succeeds" and a
+# challenge page reaches the model dressed as evidence. Detecting these keeps
+# an unreadable source from silently carrying evidentiary weight.
+CHALLENGE_MARKERS = (
+    "just a moment",
+    "checking your browser",
+    "enable javascript and cookies",
+    "cf-browser-verification",
+    "challenge-platform",
+    "attention required!",
+    "verify you are human",
+    "ddos protection by",
+    "please turn javascript on",
+)
+
 RUBRICS = {
     TYPE_AGENT_AGENT: (
         "Both parties are AI agents transacting under some mandate. "
@@ -113,6 +129,26 @@ def _truncate(text: str) -> str:
     if len(text) <= EVIDENCE_CHAR_LIMIT:
         return text
     return text[:EVIDENCE_CHAR_LIMIT] + "... (truncated)"
+
+
+def _unreadable_reason(text: str) -> str:
+    """Why this fetched page cannot serve as evidence, or "" if it can.
+
+    Deliberately narrow: only an empty body or an explicit bot-protection
+    interstitial. A short response is still real evidence — an API returning
+    `{"completed": false}` is exactly the kind of source this is built for.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return "the source returned no readable text"
+    lowered = stripped.lower()
+    for marker in CHALLENGE_MARKERS:
+        if marker in lowered:
+            return (
+                "the source served a bot-protection challenge page instead of "
+                "content, so its actual data could not be read"
+            )
+    return ""
 
 
 class OmniCourt(gl.contract.Contract):
@@ -235,6 +271,13 @@ COMPLAINANT'S EVIDENCE:
 RESPONDENT'S EVIDENCE:
 {json.dumps(respondent_evidence)}
 
+Each evidence item carries a "readable" flag. An item with "readable": false
+could not actually be retrieved — it was unreachable, or the source served a
+bot-protection page instead of its content. Such an item is NOT evidence: it
+proves nothing for or against either party, and you must not treat it as
+supporting the side that filed it. Say so plainly in your reasoning when a
+party's case rests on a source that could not be read.
+
 Weigh the evidence and decide:
 1. recommended_action: one of "favor_complainant", "favor_respondent",
    "split", "warn", "constrain", "revoke", "escalate"
@@ -245,7 +288,9 @@ Weigh the evidence and decide:
    component.
 3. reasoning: one or two sentences.
 
-If evidence is insufficient or contradictory, prefer "escalate".
+If evidence is insufficient or contradictory, prefer "escalate". If neither
+party has a readable source that speaks to the disputed facts, "escalate" is
+the correct answer — do not infer a winner from an unread page.
 
 Respond with ONLY this JSON, nothing else:
 {{"recommended_action": "...", "allocation_bps": <int>, "reasoning": "..."}}
@@ -354,18 +399,34 @@ Respond with ONLY this JSON, nothing else:
 
 
 def _fetch_all(urls: list) -> list:
-    """Render each evidence URL, keeping a placeholder for ones that fail.
+    """Render each evidence URL, flagging any that could not actually be read.
 
     A single dead link must not sink the whole adjudication — the model is
-    told explicitly which sources could not be retrieved and weighs that
-    itself.
+    told explicitly which sources failed and weighs that itself. A source that
+    returns a bot-protection page is reported as unreadable rather than passed
+    through, so it cannot be mistaken for evidence that supports a party.
     """
     fetched = []
     for url in urls:
         try:
-            fetched.append(
-                {"url": url, "content": _truncate(gl.nondet.web.render(url, mode="text"))}
-            )
+            rendered = gl.nondet.web.render(url, mode="text")
         except Exception:
-            fetched.append({"url": url, "content": "(could not fetch this URL)"})
+            fetched.append(
+                {
+                    "url": url,
+                    "readable": False,
+                    "content": "(this URL could not be fetched)",
+                }
+            )
+            continue
+
+        reason = _unreadable_reason(rendered)
+        if reason:
+            fetched.append(
+                {"url": url, "readable": False, "content": f"(unreadable: {reason})"}
+            )
+        else:
+            fetched.append(
+                {"url": url, "readable": True, "content": _truncate(rendered)}
+            )
     return fetched

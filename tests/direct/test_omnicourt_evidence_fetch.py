@@ -55,7 +55,7 @@ def test_unfetchable_url_is_reported_not_fatal(direct_vm, direct_deploy, direct_
 
     assert contract.get_verdict(dispute_id)["status"] == "resolved"
     assert len(prompts) == 1
-    assert "could not fetch this URL" in prompts[0]
+    assert "could not be fetched" in prompts[0]
     assert "https://dead.example.com/gone" in prompts[0]
 
 
@@ -76,7 +76,7 @@ def test_live_and_dead_urls_are_distinguished(direct_vm, direct_deploy, direct_a
 
     prompt = prompts[0]
     assert "Tracking: delivered 2026-09-03." in prompt
-    assert "could not fetch this URL" in prompt
+    assert "could not be fetched" in prompt
 
 
 def test_oversized_page_is_truncated(direct_vm, direct_deploy, direct_alice):
@@ -114,3 +114,110 @@ def test_prompt_carries_the_dispute_type_rubric(direct_vm, direct_deploy, direct
     assert "Both parties are humans in an ordinary commercial exchange." in prompt
     assert "Goods never arrived." in prompt
     assert "Refund" in prompt
+
+
+# A Cloudflare interstitial as served by a real block explorer. It arrives as a
+# normal 200 response, so nothing raises — this is the case that used to reach
+# the model dressed as evidence.
+CLOUDFLARE_PAGE = (
+    "Just a moment...\n"
+    "Enable JavaScript and cookies to continue\n"
+    "testnet.arc-scan.org needs to review the security of your connection."
+)
+
+
+def test_bot_challenge_page_is_reported_as_unreadable(
+    direct_vm, direct_deploy, direct_alice
+):
+    """A 200 response carrying a challenge page must not count as evidence."""
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with(contract, ["https://explorer.example.com/tx/0xabc"])
+    direct_vm.mock_web(
+        r".*explorer\.example\.com.*",
+        {"status": 200, "body": CLOUDFLARE_PAGE},
+    )
+    prompts = _capture_prompt(direct_vm)
+
+    contract.resolve_dispute(dispute_id)
+
+    prompt = prompts[0]
+    assert '"readable": false' in prompt
+    assert "bot-protection challenge page" in prompt
+    # The challenge text itself must not be presented as page content.
+    assert "needs to review the security of your connection" not in prompt
+
+
+def test_readable_source_is_marked_readable(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with(contract, ["https://api.example.com/tx/0xabc"])
+    direct_vm.mock_web(
+        r".*api\.example\.com.*",
+        {"status": 200, "body": '{"hash": "0xabc", "status": "success"}'},
+    )
+    prompts = _capture_prompt(direct_vm)
+
+    contract.resolve_dispute(dispute_id)
+
+    prompt = prompts[0]
+    assert '"readable": true' in prompt
+    assert "0xabc" in prompt
+    assert "success" in prompt
+
+
+def test_short_api_response_stays_readable(direct_vm, direct_deploy, direct_alice):
+    """A terse API body is real evidence — exactly what this is built for."""
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with(contract, ["https://api.example.com/todos/1"])
+    direct_vm.mock_web(
+        r".*api\.example\.com.*", {"status": 200, "body": '{"completed": false}'}
+    )
+    prompts = _capture_prompt(direct_vm)
+
+    contract.resolve_dispute(dispute_id)
+
+    assert '"readable": true' in prompts[0]
+
+
+def test_empty_body_is_unreadable(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with(contract, ["https://blank.example.com/x"])
+    direct_vm.mock_web(r".*blank\.example\.com.*", {"status": 200, "body": "   "})
+    prompts = _capture_prompt(direct_vm)
+
+    contract.resolve_dispute(dispute_id)
+
+    assert '"readable": false' in prompts[0]
+    assert "no readable text" in prompts[0]
+
+
+def test_unfetchable_url_is_marked_unreadable(direct_vm, direct_deploy, direct_alice):
+    """A hard fetch failure carries the same flag as a challenge page."""
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with(contract, ["https://dead.example.com/gone"])
+    prompts = _capture_prompt(direct_vm)
+
+    contract.resolve_dispute(dispute_id)
+
+    assert '"readable": false' in prompts[0]
+    assert "could not be fetched" in prompts[0]
+
+
+def test_prompt_tells_the_model_unreadable_proves_nothing(
+    direct_vm, direct_deploy, direct_alice
+):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with(contract, ["https://live.example.com/x"])
+    direct_vm.mock_web(r".*live\.example\.com.*", {"status": 200, "body": "receipt"})
+    prompts = _capture_prompt(direct_vm)
+
+    contract.resolve_dispute(dispute_id)
+
+    prompt = prompts[0]
+    assert "is NOT evidence" in prompt
+    assert "do not infer a winner from an unread page" in prompt
