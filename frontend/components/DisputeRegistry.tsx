@@ -28,6 +28,7 @@ import {
   type Dispute,
   type EvidenceRole,
 } from "@/lib/contracts/types";
+import { afterRender } from "@/lib/utils/afterRender";
 import { error, success } from "@/lib/utils/toast";
 import { AllocationBar, VerdictBadge } from "./VerdictBadge";
 import { Button } from "./ui/button";
@@ -110,27 +111,31 @@ export function DisputeRegistry() {
   };
 
   const handleResolveDone = (status: TrackedStatus) => {
-    if (status.successful !== false) {
-      invalidateDisputes();
-      success("Verdict recorded", {
-        description: "Validators reached consensus on this dispute.",
-      });
-    } else {
-      error("Adjudication did not succeed", {
-        description: "The transaction completed without a successful outcome.",
-      });
-    }
-    setResolvingId(null);
+    afterRender(() => {
+      if (status.successful !== false) {
+        invalidateDisputes();
+        success("Verdict recorded", {
+          description: "Validators reached consensus on this dispute.",
+        });
+      } else {
+        error("Adjudication did not succeed", {
+          description: "The transaction completed without a successful outcome.",
+        });
+      }
+      setResolvingId(null);
+    });
   };
 
   const handleEvidenceDone = (status: TrackedStatus) => {
-    if (status.successful !== false) {
-      invalidateDisputes();
-      success("Evidence recorded");
-    } else {
-      error("Failed to record evidence");
-    }
-    closeEvidence();
+    afterRender(() => {
+      if (status.successful !== false) {
+        invalidateDisputes();
+        success("Evidence recorded");
+      } else {
+        error("Failed to record evidence");
+      }
+      closeEvidence();
+    });
   };
 
   if (isLoading) {

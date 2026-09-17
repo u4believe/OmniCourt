@@ -17,6 +17,7 @@ import {
   DISPUTE_TYPE_LABELS,
   type DisputeType,
 } from "@/lib/contracts/types";
+import { afterRender } from "@/lib/utils/afterRender";
 import { error, success } from "@/lib/utils/toast";
 import { Button } from "./ui/button";
 import {
@@ -106,17 +107,19 @@ export function OpenDisputeModal() {
   };
 
   const handleDone = (status: TrackedStatus) => {
-    if (status.successful !== false) {
-      invalidateDisputes();
-      success("Dispute filed", {
-        description: "Add evidence, then send it for adjudication.",
+    afterRender(() => {
+      if (status.successful !== false) {
+        invalidateDisputes();
+        success("Dispute filed", {
+          description: "Add evidence, then send it for adjudication.",
+        });
+        setIsOpen(false);
+        resetForm();
+        return;
+      }
+      error("Failed to file dispute", {
+        description: "The transaction completed without a successful outcome.",
       });
-      setIsOpen(false);
-      resetForm();
-      return;
-    }
-    error("Failed to file dispute", {
-      description: "The transaction completed without a successful outcome.",
     });
   };
 
