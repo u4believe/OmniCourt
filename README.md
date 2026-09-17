@@ -131,20 +131,51 @@ node scripts/omnicourt.mjs dispute 0   # full record incl. the evidence trail
 node scripts/omnicourt.mjs verdict 0   # what an integrating app reads back
 ```
 
-Dispute `0` is a real `agent_agent` case already adjudicated on Studio Next.
-The complainant cited a public task record showing `completed: false`; the
-respondent cited a record for a *different* task. The validators caught the
+Four disputes are already adjudicated on Studio Next. Between them they cover
+all three relationship types, every outcome shape, and the reopen path.
+
+**`0` — `agent_agent` → `favor_complainant` (10000 bps).** The complainant
+cited a public task record showing task 1 `completed: false`; the respondent
+cited the record for a *different* task. The validators caught the
 substitution:
 
-> *"The complainant's evidence directly references task 1 and shows
-> `"completed": false`, which contradicts the respondent's claim that task 1 was
-> done. The respondent's evidence refers to a different task (id 4), so it does
-> not rebut the allegation about task 1."*
-> — `favor_complainant`, `allocation_bps: 10000`
+> *"The complainant's evidence directly verifies that Task 1 remains incomplete
+> according to the public record, while the respondent's evidence refers to an
+> irrelevant task (Task 4) and thus fails to refute the claim of false
+> billing."*
 
-Dispute `1` (`person_person`) resolved to `escalate`, because neither side's
-evidence actually spoke to delivery — the insufficient-evidence path working as
-designed.
+**`1` — `agent_person` → `favor_respondent` (0 bps).** Deliberately the mirror
+image of `0`: the *same two sources*, with the complainant now the one citing
+the wrong record. The opposite verdict follows, which shows the adjudicator
+reads which record refers to which task rather than pattern-matching on who
+complained:
+
+> *"The complainant says task 4 was never finished, but their readable evidence
+> is about todo item 1 and does not support that claim. The respondent provides
+> readable evidence specifically for item 4 showing `"completed": true`…"*
+
+**`2` — `person_person` → `escalate`.** The only evidence was a block explorer
+page behind bot protection. Rather than treat an unread page as support for the
+party that filed it, the verdict says so:
+
+> *"The complainant's only cited evidence is an unreadable explorer link, and
+> unreadable sources are not evidence and do not prove the transfer occurred."*
+
+**`3` — `person_person` → `favor_complainant` after two rounds.** The full
+escalate-and-reopen cycle over *one real Ethereum transaction*, cited twice. In
+round one the complainant linked the Etherscan page, which is bot-walled, and
+the dispute escalated. It was reopened, the same transaction was filed again via
+Blockscout's API, and the validators read it:
+
+> *"The unreadable Etherscan link is not evidence and does not support either
+> side. However, the readable Blockscout record shows transaction 0xa360191d…
+> succeeded on chain with 15 confirmations and transferred 8793988882811358 wei
+> from 0xdadB0d80… to 0xFEEEEEE4…, while the respondent provided no contrary
+> evidence."*
+
+That last one is the whole system in one dispute: evidence from another
+network entirely, verified by re-fetching a public URL, with the unreadable
+source correctly given no weight.
 
 ### Writes (needs a funded key)
 
