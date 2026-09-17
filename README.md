@@ -318,6 +318,19 @@ Named explicitly, because each is a judgment call rather than a gap.
   working system.
 - **Appeals.** A bonded appeal flow is a natural next step, not part of a
   coherent minimum.
+- **Uploading an image as evidence.** A *link* to a hosted image is already
+  valid evidence — the contract accepts any `https` URL. Two things are
+  missing for upload. The frontend is static, so there is nowhere for a file
+  to land; that needs a host, and a centralized one would sit awkwardly
+  against the rest of this design, so IPFS is the better fit. More
+  substantially, the contract reads evidence with
+  `render(url, mode="text")`, which returns nothing for an image, so an
+  image link is currently flagged unreadable rather than judged. Reading it
+  means the vision path — `render(url, mode="screenshot")` into
+  `exec_prompt(..., image=...)` — and note the SDK's JSON-response overload
+  takes `image` singular, so one image per prompt. Vision output also varies
+  more between validators, so the equivalence principle would need
+  retuning.
 
 ## Architecture
 
