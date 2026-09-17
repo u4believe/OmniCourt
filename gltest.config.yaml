@@ -6,6 +6,17 @@ networks:
 
   studionet: {}
 
+  # Studio Next (Consensus v0.6). The released SDK has no preset for it, so the
+  # id and url are given explicitly while reusing studionet's chain type.
+  # OMNICOURT_PRIVATE_KEY comes from the .env named below; keep it out of git.
+  studionext:
+    id: 61997
+    url: "https://studio-next.genlayer.com/api"
+    chain_type: studionet
+    accounts:
+      - "${OMNICOURT_PRIVATE_KEY}"
+    from: "${OMNICOURT_PRIVATE_KEY}"
+
 paths:
   contracts: "contracts"
 
