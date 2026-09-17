@@ -396,3 +396,130 @@ def test_resolution_preserves_the_evidence_trail(
     assert len(dispute["respondent_evidence"]) == 1
     assert dispute["verdict_action"] == "warn"
     assert dispute["claim_description"] != ""
+
+
+# ----------------------------------------------------------------------
+# Reopening — an escalate verdict asks for more evidence, so it must not
+# be a dead end. A decided verdict must not be re-rollable.
+# ----------------------------------------------------------------------
+
+
+def _resolve_as(direct_vm, contract, dispute_id, action, allocation_bps=0):
+    _mock_evidence_pages(direct_vm)
+    mock_json_llm(
+        direct_vm,
+        PROMPT_PERSON_PERSON,
+        {
+            "recommended_action": action,
+            "allocation_bps": allocation_bps,
+            "reasoning": f"Resolved as {action}.",
+        },
+    )
+    contract.resolve_dispute(dispute_id)
+
+
+def test_escalated_dispute_can_be_reopened(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with_evidence(contract, "person_person")
+    _resolve_as(direct_vm, contract, dispute_id, "escalate")
+
+    contract.reopen_dispute(dispute_id)
+
+    dispute = contract.get_dispute(dispute_id)
+    assert dispute["status"] == "open"
+    # The undecided verdict is cleared, but the evidence trail survives.
+    assert dispute["verdict_action"] == ""
+    assert dispute["verdict_reasoning"] == ""
+    assert len(dispute["complainant_evidence"]) == 1
+    assert len(dispute["respondent_evidence"]) == 1
+
+
+def test_reopened_dispute_accepts_more_evidence(direct_vm, direct_deploy, direct_alice):
+    """The whole point: the complainant can answer what the verdict asked for."""
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with_evidence(contract, "person_person")
+    _resolve_as(direct_vm, contract, dispute_id, "escalate")
+    contract.reopen_dispute(dispute_id)
+
+    contract.submit_evidence(
+        dispute_id, "complainant", "https://evidence.example.com/receipt"
+    )
+
+    assert len(contract.get_dispute(dispute_id)["complainant_evidence"]) == 2
+
+
+def test_reopened_dispute_can_reach_a_real_verdict(
+    direct_vm, direct_deploy, direct_alice
+):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with_evidence(contract, "person_person")
+    _resolve_as(direct_vm, contract, dispute_id, "escalate")
+    contract.reopen_dispute(dispute_id)
+    contract.submit_evidence(
+        dispute_id, "complainant", "https://evidence.example.com/receipt"
+    )
+
+    direct_vm.clear_mocks()
+    _resolve_as(direct_vm, contract, dispute_id, "favor_complainant", 10000)
+
+    verdict = contract.get_verdict(dispute_id)
+    assert verdict["recommended_action"] == "favor_complainant"
+    assert verdict["allocation_bps"] == 10000
+
+
+def test_a_decided_verdict_cannot_be_re_rolled(direct_vm, direct_deploy, direct_alice):
+    """Otherwise a losing party re-adjudicates until the answer changes."""
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with_evidence(contract, "person_person")
+    _resolve_as(direct_vm, contract, dispute_id, "favor_respondent")
+
+    with direct_vm.expect_revert("Only an escalated dispute can be reopened"):
+        contract.reopen_dispute(dispute_id)
+
+    assert contract.get_verdict(dispute_id)["recommended_action"] == "favor_respondent"
+
+
+def test_open_dispute_cannot_be_reopened(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with_evidence(contract, "person_person")
+
+    with direct_vm.expect_revert("Dispute is not resolved"):
+        contract.reopen_dispute(dispute_id)
+
+
+def test_reopening_unknown_dispute_is_rejected(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+
+    with direct_vm.expect_revert("Dispute does not exist"):
+        contract.reopen_dispute(5)
+
+
+def test_reopening_is_capped(direct_vm, direct_deploy, direct_alice):
+    """A dispute cannot bounce between escalate and reopen forever."""
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with_evidence(contract, "person_person")
+
+    for _ in range(3):
+        direct_vm.clear_mocks()
+        _resolve_as(direct_vm, contract, dispute_id, "escalate")
+        if contract.get_dispute(dispute_id)["resolution_rounds"] < 3:
+            contract.reopen_dispute(dispute_id)
+
+    assert contract.get_dispute(dispute_id)["resolution_rounds"] == 3
+    with direct_vm.expect_revert("has been adjudicated 3 times"):
+        contract.reopen_dispute(dispute_id)
+
+
+def test_resolution_rounds_start_at_zero(direct_vm, direct_deploy, direct_alice):
+    contract = direct_deploy(CONTRACT)
+    direct_vm.sender = direct_alice
+    dispute_id = _open_with_evidence(contract, "person_person")
+
+    assert contract.get_dispute(dispute_id)["resolution_rounds"] == 0

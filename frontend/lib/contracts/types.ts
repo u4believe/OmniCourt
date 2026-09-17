@@ -31,7 +31,11 @@ export interface Dispute {
   verdict_action: VerdictAction;
   verdict_allocation_bps: number;
   verdict_reasoning: string;
+  resolution_rounds: number;
 }
+
+/** Matches MAX_RESOLUTION_ROUNDS in contracts/omnicourt.py. */
+export const MAX_RESOLUTION_ROUNDS = 3;
 
 export interface Verdict {
   status: DisputeStatus;

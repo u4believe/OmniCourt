@@ -8,6 +8,7 @@
  *   node scripts/omnicourt.mjs open person_person <complainant> <respondent> <claim> <remedy>
  *   node scripts/omnicourt.mjs evidence <id> complainant <url>
  *   node scripts/omnicourt.mjs resolve <id>
+ *   node scripts/omnicourt.mjs reopen <id>    (escalated disputes only)
  *   node scripts/omnicourt.mjs verdict <id>
  *   node scripts/omnicourt.mjs dispute <id>
  *   node scripts/omnicourt.mjs list
@@ -121,6 +122,10 @@ switch (command) {
     // Adjudication runs an LLM per validator, so it needs a longer wait.
     await write("resolve_dispute", [Number(args[0])], { waitRetries: 400 });
     show(await read("get_verdict", [Number(args[0])]));
+    break;
+  case "reopen":
+    await write("reopen_dispute", [Number(args[0])]);
+    console.log(`Dispute ${args[0]} reopened for more evidence`);
     break;
   case "address":
     console.log(contractAddress());

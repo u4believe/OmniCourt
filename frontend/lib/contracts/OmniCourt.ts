@@ -119,6 +119,7 @@ function toDispute(raw: unknown): Dispute {
     verdict_action: asString(record.verdict_action) as Dispute["verdict_action"],
     verdict_allocation_bps: asNumber(record.verdict_allocation_bps),
     verdict_reasoning: asString(record.verdict_reasoning),
+    resolution_rounds: asNumber(record.resolution_rounds),
   };
 }
 

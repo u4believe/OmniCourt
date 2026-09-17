@@ -46,6 +46,9 @@ VALID_ACTIONS = (
 )
 
 MAX_EVIDENCE_PER_SIDE = 8
+# An escalate verdict asks for more evidence, so it must not be a dead end.
+# Reopening is capped so a dispute cannot be re-adjudicated indefinitely.
+MAX_RESOLUTION_ROUNDS = 3
 # Each fetched page is truncated before it reaches the prompt so that one
 # huge page cannot crowd out the rest of the evidence or blow the context.
 EVIDENCE_CHAR_LIMIT = 4000
@@ -109,6 +112,7 @@ class Dispute:
     verdict_action: str
     verdict_allocation_bps: gl.u256
     verdict_reasoning: str
+    resolution_rounds: gl.u256
 
 
 def _clamp_allocation(raw: object) -> int:
@@ -189,6 +193,7 @@ class OmniCourt(gl.contract.Contract):
         dispute.verdict_action = ""
         dispute.verdict_allocation_bps = gl.u256(0)
         dispute.verdict_reasoning = ""
+        dispute.resolution_rounds = gl.u256(0)
 
         self.next_dispute_id = dispute_id + gl.u256(1)
         return dispute_id
@@ -329,6 +334,35 @@ Respond with ONLY this JSON, nothing else:
         )
         dispute.verdict_reasoning = str(outcome.get("reasoning", ""))
         dispute.status = STATUS_RESOLVED
+        dispute.resolution_rounds = dispute.resolution_rounds + gl.u256(1)
+
+    @gl.public.write
+    def reopen_dispute(self, dispute_id: gl.u256) -> None:
+        """Return an escalated dispute to open so more evidence can be filed.
+
+        Only an escalate verdict can be reopened. A decided verdict stands —
+        otherwise a losing party could re-adjudicate until the answer changed,
+        which would make every verdict provisional and the court worthless.
+        """
+        dispute = self.disputes.get(dispute_id, None)
+        if dispute is None:
+            raise gl.vm.UserError("Dispute does not exist")
+        if dispute.status != STATUS_RESOLVED:
+            raise gl.vm.UserError("Dispute is not resolved")
+        if dispute.verdict_action != ACTION_ESCALATE:
+            raise gl.vm.UserError(
+                "Only an escalated dispute can be reopened; a decided verdict stands"
+            )
+        if dispute.resolution_rounds >= gl.u256(MAX_RESOLUTION_ROUNDS):
+            raise gl.vm.UserError(
+                f"Dispute has been adjudicated {MAX_RESOLUTION_ROUNDS} times"
+            )
+
+        # The evidence trail is kept; only the undecided verdict is cleared.
+        dispute.status = STATUS_OPEN
+        dispute.verdict_action = ""
+        dispute.verdict_allocation_bps = gl.u256(0)
+        dispute.verdict_reasoning = ""
 
     # ------------------------------------------------------------------
     # Reads — what an integrating application calls
@@ -395,6 +429,7 @@ Respond with ONLY this JSON, nothing else:
             "verdict_action": dispute.verdict_action,
             "verdict_allocation_bps": dispute.verdict_allocation_bps,
             "verdict_reasoning": dispute.verdict_reasoning,
+            "resolution_rounds": dispute.resolution_rounds,
         }
 
 

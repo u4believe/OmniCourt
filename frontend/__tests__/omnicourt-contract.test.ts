@@ -13,7 +13,7 @@ vi.mock("genlayer-js", () => ({
 
 import OmniCourt from "../lib/contracts/OmniCourt";
 
-const ADDRESS = "0xa4B43D14C18bc6397B771DDb89D63e1c1d02c786";
+const ADDRESS = "0x2a98302C2252C05Bb05937C660138968e3ed9cdf";
 
 /** The exact shape Studio Next returns for a resolved dispute. */
 const RESOLVED_DISPUTE = {
@@ -29,6 +29,7 @@ const RESOLVED_DISPUTE = {
   verdict_action: "favor_complainant",
   verdict_allocation_bps: 10000,
   verdict_reasoning: "The task record still shows completed=false.",
+  resolution_rounds: 1,
 };
 
 describe("OmniCourt reads", () => {
@@ -59,6 +60,16 @@ describe("OmniCourt reads", () => {
     expect(dispute.respondent_evidence).toEqual([
       "https://jsonplaceholder.typicode.com/todos/4",
     ]);
+  });
+
+  it("carries the resolution round count through", async () => {
+    mocks.readContract.mockResolvedValue([
+      { ...RESOLVED_DISPUTE, resolution_rounds: 2n },
+    ]);
+
+    const [dispute] = await new OmniCourt(ADDRESS).getDisputes();
+
+    expect(dispute.resolution_rounds).toBe(2);
   });
 
   it("coerces bigint allocations that would otherwise reach React", async () => {

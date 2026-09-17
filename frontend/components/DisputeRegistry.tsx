@@ -7,6 +7,7 @@ import {
   FileSearch,
   Gavel,
   Loader2,
+  RotateCcw,
   Scale,
   ShieldAlert,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import {
 } from "@/lib/hooks/useOmniCourt";
 import {
   DISPUTE_TYPE_LABELS,
+  MAX_RESOLUTION_ROUNDS,
   type Dispute,
   type EvidenceRole,
 } from "@/lib/contracts/types";
@@ -55,6 +57,7 @@ export function DisputeRegistry() {
   const contractAddress = getContractAddress();
 
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [reopeningId, setReopeningId] = useState<number | null>(null);
   const [evidenceTarget, setEvidenceTarget] = useState<EvidenceTarget | null>(null);
   const [evidenceUrl, setEvidenceUrl] = useState("");
   const [evidenceSubmitting, setEvidenceSubmitting] = useState(false);
@@ -70,6 +73,19 @@ export function DisputeRegistry() {
             args: [resolvingId],
           },
     [contractAddress, resolvingId],
+  );
+
+  const reopenTx = useMemo<SubmitInput | null>(
+    () =>
+      reopeningId === null
+        ? null
+        : {
+            kind: "write",
+            address: contractAddress as `0x${string}`,
+            method: "reopen_dispute",
+            args: [reopeningId],
+          },
+    [contractAddress, reopeningId],
   );
 
   const evidenceTx = useMemo<SubmitInput | null>(
@@ -124,6 +140,20 @@ export function DisputeRegistry() {
         });
       }
       setResolvingId(null);
+    });
+  };
+
+  const handleReopenDone = (status: TrackedStatus) => {
+    afterRender(() => {
+      if (status.successful !== false) {
+        invalidateDisputes();
+        success("Dispute reopened", {
+          description: "Add the evidence the adjudicator asked for, then resolve again.",
+        });
+      } else {
+        error("Failed to reopen dispute");
+      }
+      setReopeningId(null);
     });
   };
 
@@ -203,6 +233,10 @@ export function DisputeRegistry() {
               if (!requireWallet()) return;
               setResolvingId(dispute.id);
             }}
+            onReopen={() => {
+              if (!requireWallet()) return;
+              setReopeningId(dispute.id);
+            }}
           />
         ))}
       </div>
@@ -228,6 +262,33 @@ export function DisputeRegistry() {
               theme="dark"
               trackUntil="decided"
               onDone={handleResolveDone}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={reopeningId !== null}
+        onOpenChange={(open) => !open && setReopeningId(null)}
+      >
+        <DialogContent className="brand-card border-2 sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold">Reopen for more evidence</DialogTitle>
+            <DialogDescription>
+              An escalated dispute was never decided — the adjudicator asked for
+              more. Reopening returns it to open so either side can file further
+              evidence. The existing evidence trail is kept.
+            </DialogDescription>
+          </DialogHeader>
+
+          {kit && contractAddress && reopenTx && (
+            <GenLayerTransactionPanel
+              kit={kit}
+              tx={reopenTx}
+              network={GENLAYER_NETWORK.chainName}
+              theme="dark"
+              trackUntil="decided"
+              onDone={handleReopenDone}
             />
           )}
         </DialogContent>
@@ -301,14 +362,20 @@ function DisputeCard({
   dispute,
   onAddEvidence,
   onResolve,
+  onReopen,
 }: {
   dispute: Dispute;
   onAddEvidence: (role: EvidenceRole) => void;
   onResolve: () => void;
+  onReopen: () => void;
 }) {
   const isResolved = dispute.status === "resolved";
   const hasEvidence =
     dispute.complainant_evidence.length + dispute.respondent_evidence.length > 0;
+  // An escalate verdict is not a decision — it is a request for more. Only
+  // that state may be reopened; a decided verdict stands.
+  const isUndecided = isResolved && dispute.verdict_action === "escalate";
+  const roundsLeft = MAX_RESOLUTION_ROUNDS - dispute.resolution_rounds;
 
   return (
     <div className="brand-card p-5 space-y-4">
@@ -345,6 +412,13 @@ function DisputeCard({
             Adjudicate
           </Button>
         )}
+
+        {isUndecided && roundsLeft > 0 && (
+          <Button size="sm" variant="outline" onClick={onReopen} className="gap-2">
+            <RotateCcw className="w-4 h-4" />
+            Reopen for more evidence
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -375,6 +449,15 @@ function DisputeCard({
             action={dispute.verdict_action}
             allocationBps={dispute.verdict_allocation_bps}
           />
+
+          {isUndecided && (
+            <p className="text-xs text-muted-foreground">
+              {roundsLeft > 0
+                ? "This was never decided. Reopen it to file the evidence the adjudicator asked for — " +
+                  `${roundsLeft} of ${MAX_RESOLUTION_ROUNDS} adjudications remaining.`
+                : `Adjudicated ${MAX_RESOLUTION_ROUNDS} times without a decision; it can no longer be reopened.`}
+            </p>
+          )}
         </div>
       )}
 

@@ -8,7 +8,7 @@ adjudicated by decentralized AI validators, whether the dispute is between two
 AI agents, an agent and a human, or two humans.
 
 - **Network:** GenLayer Studio Next (chain `61997`)
-- **Contract:** `0xa4B43D14C18bc6397B771DDb89D63e1c1d02c786`
+- **Contract:** `0x2a98302C2252C05Bb05937C660138968e3ed9cdf`
 - **Contract source:** [`contracts/omnicourt.py`](contracts/omnicourt.py)
 
 ---
@@ -72,6 +72,23 @@ the dispute has a financial dimension (10000 = fully, 5000 = even split). It is
 Malformed model output cannot corrupt the registry: an action outside the
 allowed set is coerced to `escalate`, and an allocation that is out of range,
 negative, or unparseable is clamped into 0-10000.
+
+## Escalate is not a dead end
+
+`escalate` means the adjudicator could not decide on the record in front of it
+— usually because a source was unreadable or nobody filed anything that spoke
+to the disputed facts. Treating that as final would be perverse: the verdict is
+a request for more evidence, so there has to be a way to supply it.
+
+`reopen_dispute` returns an escalated dispute to `open`. The evidence trail is
+kept and the undecided verdict is cleared, so either side can file more and
+resolve again.
+
+**Only an escalate verdict can be reopened.** A decided verdict stands — if a
+losing party could re-adjudicate until the answer changed, every verdict would
+be provisional and the court would be worthless. Reopening is also capped at
+`MAX_RESOLUTION_ROUNDS` (3), so a dispute cannot bounce between escalate and
+reopen forever.
 
 ## Choosing evidence a validator can actually read
 
@@ -178,7 +195,7 @@ const chain = {
 };
 
 const verdict = await createClient({ chain }).readContract({
-  address: "0xa4B43D14C18bc6397B771DDb89D63e1c1d02c786",
+  address: "0x2a98302C2252C05Bb05937C660138968e3ed9cdf",
   functionName: "get_verdict",
   args: [disputeId],
 });
@@ -195,6 +212,7 @@ agent's permission, flag reputation.
 | `open_dispute(type, complainant_ref, respondent_ref, claim, remedy)` | write | Files a dispute, returns its id |
 | `submit_evidence(dispute_id, role, evidence_url)` | write | Attaches a public URL to one side |
 | `resolve_dispute(dispute_id)` | write | Runs adjudication across validators |
+| `reopen_dispute(dispute_id)` | write | Returns an escalated dispute to open for more evidence |
 | `get_verdict(dispute_id)` | view | What an integrating app reads back |
 | `get_dispute(dispute_id)` | view | Full record incl. the evidence trail |
 | `list_disputes()` | view | Every dispute in the registry |
