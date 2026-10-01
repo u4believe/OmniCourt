@@ -1,0 +1,62 @@
+# Publishes the frontend to GitHub Pages on every push to main.
+#
+# The app is a static export that talks straight to Studio Next, so this needs
+# no secrets: every value below is already compiled into the public bundle.
+name: Deploy frontend to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a newer push supersede an in-flight deploy rather than queueing behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Installs from the root lockfile; npm workspaces pulls in frontend too.
+      - run: npm ci
+
+      - name: Build static export
+        working-directory: frontend
+        env:
+          # Pages serves the site under the repository name.
+          NEXT_PUBLIC_BASE_PATH: /OmniCourt
+          NEXT_PUBLIC_GENLAYER_RPC_URL: https://studio-next.genlayer.com/api
+          NEXT_PUBLIC_GENLAYER_CHAIN_ID: "61997"
+          NEXT_PUBLIC_GENLAYER_CHAIN_NAME: GenLayer Studio Next
+          NEXT_PUBLIC_GENLAYER_SYMBOL: GEN
+          NEXT_PUBLIC_CONTRACT_ADDRESS: "0x2a98302C2252C05Bb05937C660138968e3ed9cdf"
+        run: npm run build
+
+      # Without this, Pages' Jekyll step strips the _next directory.
+      - run: touch frontend/out/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

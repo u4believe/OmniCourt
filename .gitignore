@@ -31,3 +31,6 @@ artifacts/
 
 # Local key files used by the deploy/CLI scripts — never commit these.
 *.key
+
+# Static export output
+/frontend/out
