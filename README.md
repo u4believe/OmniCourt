@@ -13,6 +13,28 @@ AI agents, an agent and a human, or two humans.
 
 ---
 
+## Submission description
+
+Copy-paste for the Portal contribution field.
+
+> OmniCourt is a single deployed GenLayer contract that any application — on any
+> chain, or none at all — can call into to have a disputed transaction judged by
+> decentralized AI validators.
+>
+> Evidence is any public URL. Validators re-fetch it independently, so nothing is
+> bridged and no foreign chain state is read. In one live dispute, validators
+> running Claude, Gemini and GPT read a real Ethereum transaction from
+> Blockscout's API, disagreed with one another, and still reached consensus —
+> quoting the transaction's confirmations and its exact wei amount in the verdict
+> they returned.
+>
+> One registry serves three relationship types: agent-to-agent, agent-to-person
+> and person-to-person. It returns a recommended action, an allocation in basis
+> points, and the reasoning behind both. Enforcement stays with the calling
+> application.
+
+---
+
 ## Why this is genuinely network-agnostic
 
 GenLayer validators never read state from the chain the dispute happened on.
