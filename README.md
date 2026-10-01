@@ -8,30 +8,8 @@ adjudicated by decentralized AI validators, whether the dispute is between two
 AI agents, an agent and a human, or two humans.
 
 - **Network:** GenLayer Studio Next (chain `61997`)
-- **Contract:** `0x2a98302C2252C05Bb05937C660138968e3ed9cdf`
+- **Contract:** [`0x2a98302C2252C05Bb05937C660138968e3ed9cdf`](https://explorer-studio-dev.genlayer.com/address/0x2a98302C2252C05Bb05937C660138968e3ed9cdf)
 - **Contract source:** [`contracts/omnicourt.py`](contracts/omnicourt.py)
-
----
-
-## Submission description
-
-Copy-paste for the Portal contribution field.
-
-> OmniCourt is a single deployed GenLayer contract that any application — on any
-> chain, or none at all — can call into to have a disputed transaction judged by
-> decentralized AI validators.
->
-> Evidence is any public URL. Validators re-fetch it independently, so nothing is
-> bridged and no foreign chain state is read. In one live dispute, validators
-> running Claude, Gemini and GPT read a real Ethereum transaction from
-> Blockscout's API, disagreed with one another, and still reached consensus —
-> quoting the transaction's confirmations and its exact wei amount in the verdict
-> they returned.
->
-> One registry serves three relationship types: agent-to-agent, agent-to-person
-> and person-to-person. It returns a recommended action, an allocation in basis
-> points, and the reasoning behind both. Enforcement stays with the calling
-> application.
 
 ---
 
